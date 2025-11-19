@@ -1,0 +1,21 @@
+gradio[mcp]
+anthropic==0.40.0
+google-generativeai==0.8.3
+openai==1.54.0
+elevenlabs==1.10.0
+llama-index==0.11.0
+llama-index-vector-stores-chroma==0.2.0
+# blaxel-sdk
+modal==0.64.0
+python-dotenv==1.0.0
+requests==2.32.0
+beautifulsoup4==4.12.0
+pygments==2.18.0
+loguru==0.7.2
+pydantic==2.9.0
+plotly==5.24.0
+cachetools
+tenacity
+Pillow==10.4.0
+duckduckgo-search==6.3.5
+pydantic-settings==2.5.0
