@@ -87,13 +87,13 @@ Navigate to the URL provided in the console (usually `http://localhost:7860`) to
 ```mermaid
 graph TD
     User[User] --> UI[Gradio UI]
-    UI --> Orch[Orchestrator (Claude Sonnet 4.5)]
-    Orch --> Viz[Visual Agent (Gemini 3.0)]
-    Orch --> Code[Codebase Agent (Claude Sonnet 4.5)]
-    Orch --> Web[Web Search Agent (GPT-4)]
+    UI --> Orch[Orchestrator - Claude Sonnet]
+    Orch --> Viz[Visual Agent - Gemini 2.0]
+    Orch --> Code[Codebase Agent - Claude Sonnet]
+    Orch --> Web[Web Search Agent - GPT-4]
     Orch --> MCP[MCP Servers]
-    Orch --> Blaxel[3D Viz (Blaxel)]
-    Orch --> TTS[Voice (ElevenLabs)]
+    Orch --> Blaxel[3D Visualization]
+    Orch --> TTS[Voice - ElevenLabs]
 ```
 
 ## 🤝 Contributing
