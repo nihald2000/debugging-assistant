@@ -1,0 +1,17 @@
+
+services:
+  filesystem:
+    build: ./docker/filesystem
+    image: mcp/filesystem
+    volumes:
+      - .:/data
+  
+  github:
+    build: ./docker/github
+    image: mcp/github
+    environment:
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+  
+  websearch:
+    build: ./docker/websearch
+    image: mcp/websearch

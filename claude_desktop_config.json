@@ -1,0 +1,41 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-v",
+        "${HOME}/Documents/MyProject:/data",
+        "mcp/filesystem"
+      ]
+    },
+    "github": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "GITHUB_TOKEN",
+        "mcp/github"
+      ]
+    },
+    "websearch": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "mcp/websearch"
+      ]
+    },
+    "modal": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-modal"
+      ]
+    }
+  }
+}

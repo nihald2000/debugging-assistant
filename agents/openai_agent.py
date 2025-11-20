@@ -1,226 +1,162 @@
+from typing import Dict, Any, List, Optional
 import json
-from typing import Any, Dict, List, Optional, AsyncGenerator
-import openai
-from pydantic import BaseModel, Field
+import os
+from swarm import Swarm, Agent
 from .base_agent import BaseAgent
 from loguru import logger
-from tenacity import retry, stop_after_attempt, wait_exponential
+from mcp_servers.web_search_mcp import search_web, search_stack_overflow, get_page_content
+from mcp_servers.filesystem_mcp import read_file, list_files
 
-# Import MCP tools
-from mcp_servers.web_search_mcp import search_stack_overflow, search_web, get_page_content, extract_code_snippets
-from mcp_servers.github_mcp import search_issues, find_similar_bugs
+# --- Handoff Functions ---
 
-class WebResearch(BaseModel):
-    stack_overflow_solutions: List[dict] = Field(description="Relevant Stack Overflow threads with solutions")
-    documentation_links: List[str] = Field(description="Links to relevant official documentation")
-    github_solutions: List[dict] = Field(description="Relevant GitHub issues or PRs")
-    synthesized_fix: str = Field(description="A synthesized strategy for fixing the error based on research")
-    confidence_score: float = Field(description="Confidence score between 0.0 and 1.0")
+def transfer_to_visual():
+    """Transfer to the Visual Agent for image analysis."""
+    return visual_agent
+
+def transfer_to_code():
+    """Transfer to the Code Agent for codebase search."""
+    return code_agent
+
+def transfer_to_web():
+    """Transfer to the Web Agent for online research."""
+    return web_agent
+
+def transfer_to_synthesis():
+    """Transfer to the Synthesis Agent to combine findings."""
+    return synthesis_agent
+
+def transfer_back_to_triage():
+    """Transfer back to the Triage Agent for further coordination."""
+    return triage_agent
+
+# --- Tool Wrappers ---
+
+def search_web_tool(query: str) -> str:
+    """Search the web for information."""
+    results = search_web(query)
+    return json.dumps(results)
+
+def search_stackoverflow_tool(query: str) -> str:
+    """Search Stack Overflow for errors."""
+    results = search_stack_overflow(query)
+    return json.dumps(results)
+
+def read_file_tool(file_path: str) -> str:
+    """Read a file from the codebase."""
+    return read_file(file_path)
+
+def list_files_tool(directory: str = ".", pattern: str = "*") -> str:
+    """List files in the codebase."""
+    results = list_files(directory, pattern)
+    return json.dumps(results)
+
+# --- Agent Definitions ---
+
+triage_agent = Agent(
+    name="TriageAgent",
+    instructions="""You are the Triage Agent.
+    Your goal is to orchestrate the debugging process.
+    1. Analyze the error context and history.
+    2. Decide which specialist to call next:
+       - If there is an image/screenshot, call VisualAgent.
+       - If you need to check the code, call CodeAgent.
+       - If you need external info, call WebAgent.
+    3. If you have gathered enough information from specialists, call SynthesisAgent to finalize the report.
+    
+    Always check the conversation history to see what has already been done.
+    """,
+    functions=[transfer_to_visual, transfer_to_code, transfer_to_web, transfer_to_synthesis]
+)
+
+visual_agent = Agent(
+    name="VisualAgent",
+    instructions="""You are the Visual Agent.
+    Analyze the visual context (screenshots, UI descriptions) provided in the context variables.
+    Identify UI elements, error messages, or visual anomalies.
+    Once done, transfer back to TriageAgent.
+    """,
+    functions=[transfer_back_to_triage]
+)
+
+code_agent = Agent(
+    name="CodeAgent",
+    instructions="""You are the Code Agent.
+    Search the codebase for error messages, function names, or relevant logic.
+    Use `list_files` and `read_file` to explore.
+    Once you have found relevant code or need new direction, transfer back to TriageAgent.
+    """,
+    functions=[read_file_tool, list_files_tool, transfer_back_to_triage]
+)
+
+web_agent = Agent(
+    name="WebAgent",
+    instructions="""You are the Web Agent.
+    Search online for similar bugs, documentation, or solutions.
+    Use `search_web` and `search_stackoverflow`.
+    Once you have gathered info, transfer back to TriageAgent.
+    """,
+    functions=[search_web_tool, search_stackoverflow_tool, transfer_back_to_triage]
+)
+
+synthesis_agent = Agent(
+    name="SynthesisAgent",
+    instructions="""You are the Synthesis Agent.
+    Your goal is to combine all findings from the conversation history into a final report.
+    1. Summarize the Root Cause.
+    2. Propose Solutions.
+    3. Provide Fix Instructions.
+    
+    Output the final report clearly. This ends the session.
+    """,
+    functions=[] # No handoffs, this is the end
+)
+
+# --- Main Class ---
 
 class OpenAIAgent(BaseAgent):
-    def __init__(self, api_key: str, model: str = "gpt-4-turbo-2024-04-09"):
+    def __init__(self, api_key: str, model: str = "gpt-4o"):
         super().__init__(api_key, model)
-        self.client = openai.AsyncOpenAI(api_key=api_key)
+        self.client = Swarm() 
         
-        # Define tools for OpenAI function calling
-        self.tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "search_stack_overflow",
-                    "description": "Search Stack Overflow for similar error messages and solutions.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "error_query": {"type": "string", "description": "The error message or query"}
-                        },
-                        "required": ["error_query"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "search_web",
-                    "description": "General web search for documentation and articles.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "query": {"type": "string", "description": "Search query"}
-                        },
-                        "required": ["query"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "find_similar_bugs",
-                    "description": "Find similar bugs in GitHub repositories.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "error_message": {"type": "string", "description": "The error message"}
-                        },
-                        "required": ["error_message"]
-                    }
-                }
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_page_content",
-                    "description": "Read the content of a specific URL.",
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "url": {"type": "string", "description": "The URL to read"}
-                        },
-                        "required": ["url"]
-                    }
-                }
-            }
-        ]
-
-    def format_prompt(self, context: Dict[str, Any]) -> str:
-        """Format the system prompt."""
-        error_info = context.get("error_info", "No specific error provided.")
-        code_context = context.get("code_context", "")
-        
-        prompt = f"""
-        You are an expert Web Research Agent. Your goal is to find solutions for coding errors by searching the web.
-        
-        Error Information:
-        {error_info}
-        
-        Code Context:
-        {code_context}
-        
-        Task:
-        1. Search Stack Overflow for the specific error message.
-        2. Search for official documentation related to the failing library or function.
-        3. Check for similar GitHub issues if applicable.
-        4. Read the content of promising search results to understand the fix.
-        5. Synthesize a solution strategy based on the best findings.
-        
-        Prioritize solutions that are:
-        - Recent (last 2-3 years)
-        - Highly upvoted or accepted
-        - Directly relevant to the specific error and context
-        """
-        return prompt
-
-    async def _execute_tool(self, tool_call: Any) -> Any:
-        """Execute local MCP tools based on OpenAI tool call."""
-        try:
-            name = tool_call.function.name
-            args = json.loads(tool_call.function.arguments)
-            
-            logger.info(f"Executing tool: {name} with args: {args}")
-            
-            if name == "search_stack_overflow":
-                return search_stack_overflow(args["error_query"])
-            elif name == "search_web":
-                return search_web(args["query"])
-            elif name == "find_similar_bugs":
-                return find_similar_bugs(args["error_message"])
-            elif name == "get_page_content":
-                return get_page_content(args["url"])
-            else:
-                return f"Unknown tool: {name}"
-        except Exception as e:
-            logger.error(f"Tool execution failed: {e}")
-            return f"Error executing {name}: {str(e)}"
-
-    async def _call_provider(self, prompt: str) -> str:
-        """
-        Call OpenAI with tool use loop.
-        """
-        messages = [
-            {"role": "system", "content": "You are a helpful research assistant."},
-            {"role": "user", "content": prompt}
-        ]
-        
-        max_turns = 5
-        current_turn = 0
-        
-        while current_turn < max_turns:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                tools=self.tools,
-                tool_choice="auto"
-            )
-            
-            message = response.choices[0].message
-            
-            if message.tool_calls:
-                messages.append(message)
-                
-                for tool_call in message.tool_calls:
-                    result = await self._execute_tool(tool_call)
-                    
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": str(result)
-                    })
-                
-                current_turn += 1
-            else:
-                return message.content
-
-        return "Research incomplete: Max tool turns reached."
-
-    async def _stream_provider(self, prompt: str) -> AsyncGenerator[str, None]:
-        """Streaming implementation."""
-        stream = await self.client.chat.completions.create(
-            model=self.model,
-            messages=[{"role": "user", "content": prompt}],
-            stream=True
-        )
-        async for chunk in stream:
-            if chunk.choices[0].delta.content:
-                yield chunk.choices[0].delta.content
-
     async def analyze(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Perform web research.
+        Run the Swarm of agents to analyze the error.
         """
+        logger.info("Starting OpenAI Swarm analysis (Triage Pattern)...")
+        
+        # Prepare context variables
+        swarm_context = {
+            "error_text": context.get("error_text", ""),
+            "image_description": context.get("image_description", "No image provided"),
+            "project_root": os.getcwd()
+        }
+        
+        messages = [
+            {"role": "user", "content": f"Please debug this error: {context.get('error_text')}"}
+        ]
+        
         try:
-            prompt = self.format_prompt(context)
+            # Run the swarm starting with TriageAgent
+            response = self.client.run(
+                agent=triage_agent,
+                messages=messages,
+                context_variables=swarm_context,
+                max_turns=30
+            )
             
-            json_instruction = """
+            logger.info(f"Swarm finished. Last agent: {response.agent.name}")
             
-            Finally, output your research findings as a valid JSON object matching this structure:
-            {
-                "stack_overflow_solutions": [{"title": "str", "url": "str", "relevance": float}],
-                "documentation_links": ["str"],
-                "github_solutions": [{"title": "str", "url": "str"}],
-                "synthesized_fix": "str",
-                "confidence_score": float
+            final_content = response.messages[-1]["content"]
+            
+            return {
+                "swarm_analysis": final_content,
+                "agent_trace": [m["role"] + " (" + (m.get("sender") or "User") + "): " + (m.get("content") or "") for m in response.messages],
+                "status": "success"
             }
-            """
-            
-            response_text = await self.call_llm(prompt + json_instruction)
-            
-            # Extract JSON
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0].strip()
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0].strip()
-                
-            data = json.loads(response_text)
-            research = WebResearch(**data)
-            
-            return research.model_dump()
             
         except Exception as e:
-            logger.error(f"OpenAI research failed: {e}")
-            return {
-                "stack_overflow_solutions": [],
-                "documentation_links": [],
-                "github_solutions": [],
-                "synthesized_fix": f"Research failed: {str(e)}",
-                "confidence_score": 0.0
-            }
+            logger.error(f"Swarm analysis failed: {e}")
+            return {"error": str(e), "status": "failed"}
+
+    def get_metrics(self) -> Dict[str, Any]:
+        return {"type": "swarm", "model": self.model}

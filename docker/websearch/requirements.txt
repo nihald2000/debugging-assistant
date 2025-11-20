@@ -1,0 +1,4 @@
+mcp[cli]
+duckduckgo-search
+beautifulsoup4
+requests

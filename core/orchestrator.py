@@ -18,6 +18,9 @@ class DebugResult(BaseModel):
     agent_metrics: Dict[str, Any]
     execution_time: float
 
+from core.mcp_client import MCPClientManager
+from pathlib import Path
+
 class DebugOrchestrator:
     def __init__(self):
         self.gemini_agent = GeminiAgent(api_key=api_config.google_ai_api_key)
@@ -26,6 +29,42 @@ class DebugOrchestrator:
         
         # For synthesis, we reuse the Claude agent instance but with a different prompt
         self.synthesizer = self.claude_agent
+        
+        # MCP Client
+        self.mcp_client = MCPClientManager()
+        self.mcp_initialized = False
+
+    async def startup(self):
+        """Initialize MCP connections."""
+        if self.mcp_initialized:
+            return
+
+        try:
+            config_path = Path("claude_desktop_config.json")
+            if config_path.exists():
+                with open(config_path, "r") as f:
+                    config = json.load(f)
+                
+                servers = config.get("mcpServers", {})
+                for name, server_config in servers.items():
+                    cmd = server_config.get("command")
+                    args = server_config.get("args", [])
+                    env = server_config.get("env", {})
+                    
+                    if cmd:
+                        await self.mcp_client.connect_stdio(name, cmd, args, env)
+            
+            # Update agents with MCP capabilities
+            # We inject the client into ClaudeAgent so it can use the tools
+            self.claude_agent.mcp_client = self.mcp_client
+            if self.mcp_client.tools:
+                self.claude_agent.tools = self.mcp_client.tools
+                logger.info(f"Updated ClaudeAgent with {len(self.mcp_client.tools)} MCP tools")
+                
+            self.mcp_initialized = True
+            
+        except Exception as e:
+            logger.error(f"MCP startup failed: {e}")
 
     async def parse_error(self, error_text: str) -> Dict[str, Any]:
         """
@@ -110,6 +149,9 @@ class DebugOrchestrator:
         """
         start_time = time.time()
         logger.info("Starting debug orchestration...")
+        
+        # Initialize MCP
+        await self.startup()
         
         if stream_callback:
             await stream_callback("Starting analysis...")
