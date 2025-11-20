@@ -72,6 +72,22 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 
-# LlamaIndex
-storage/
-index/
+
+# Modal
+.modal/
+modal_token_id
+modal_token_secret
+
+# ElevenLabs
+elevenlabs_cache/
+
+# Config
+config.json
+secrets.json
+credentials.json
+
+# Audio files
+*.wav
+*.mp3
+*.opus
+audio_cache/

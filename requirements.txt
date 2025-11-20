@@ -27,3 +27,4 @@ pyaudio
 opencv-python
 smolagents
 modal
+websockets
