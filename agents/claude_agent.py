@@ -1,21 +1,12 @@
 import json
 import asyncio
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, AsyncGenerator
 from pydantic import BaseModel, Field
 from .base_agent import BaseAgent
 from loguru import logger
 
-try:
-    from smolagents import CodeAgent, tool, LiteLLMModel, HfApiModel, Tool
-except ImportError:
-    # Fallback for development environment if package not installed yet
-    logger.warning("smolagents not found. Please pip install smolagents")
-    CodeAgent = Any
-    tool = lambda x: x
-    LiteLLMModel = Any
-    HfApiModel = Any
-    Tool = Any
+from smolagents import CodeAgent, tool, LiteLLMModel, ApiModel, Tool
 
 # Import MCP tools logic (we'll wrap them as smolagents tools)
 from mcp_servers.filesystem_mcp import search_in_files, read_file as fs_read_file, get_file_context as fs_get_context
@@ -73,7 +64,7 @@ class ImageClassifierTool(Tool):
     output_type = "string"
 
     def __init__(self):
-        self.model = HfApiModel("google/vit-base-patch16-224")
+        self.model = ApiModel("google/vit-base-patch16-224")
         super().__init__()
 
     def forward(self, image_path: str) -> str:
@@ -207,3 +198,48 @@ class ClaudeAgent(BaseAgent):
                 "code_snippets": [],
                 "confidence_score": 0.0
             }
+    async def _call_provider(self, prompt: str) -> str:
+        """
+        Call smolagents CodeAgent synchronously in a thread pool.
+        Converts the response to a string format matching BaseAgent interface.
+        """
+        try:
+            logger.info(f"Starting ClaudeAgent (smolagents) run for prompt: {prompt[:50]}...")
+            
+            # Run agent (CodeAgent.run is synchronous, so we wrap it)
+            # The agent will write and execute python code to call tools and solve the task
+            response = await asyncio.to_thread(self.agent.run, prompt)
+            
+            # Handle non-string responses (though CodeAgent usually returns string or object with __str__)
+            if not isinstance(response, str):
+                response = str(response)
+                
+            logger.info("ClaudeAgent run completed successfully.")
+            return response
+            
+        except Exception as e:
+            logger.error(f"ClaudeAgent run failed: {e}")
+            # Return a structured error message that the UI can display
+            return f"Error executing agent: {str(e)}"
+
+    async def _stream_provider(self, prompt: str) -> AsyncGenerator[str, None]:
+        """
+        Simulate streaming by chunking the CodeAgent response.
+        Note: smolagents doesn't support native streaming yet.
+        """
+        try:
+            # Get full response first
+            full_response = await self._call_provider(prompt)
+            
+            # Split into chunks (sentences or fixed size) to simulate streaming
+            # This provides better UX than waiting for the whole block
+            chunk_size = 50
+            for i in range(0, len(full_response), chunk_size):
+                chunk = full_response[i:i + chunk_size]
+                yield chunk
+                # Small delay to simulate generation speed
+                await asyncio.sleep(0.05)
+                
+        except Exception as e:
+            logger.error(f"ClaudeAgent stream failed: {e}")
+            yield f"Error streaming agent response: {str(e)}"

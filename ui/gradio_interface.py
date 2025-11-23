@@ -55,7 +55,7 @@ class DebugGenieUI:
                 )
             
             progress(0.1, desc="Starting analysis...")
-            chat_history.append(["You", f"Analyze this error:\n```\n{error_text[:200]}...\n```"])
+            chat_history.append({"role": "user", "content": f"Analyze this error:\n```\n{error_text[:200]}...\n```"})
             
             # Build context
             context = {
@@ -90,7 +90,7 @@ class DebugGenieUI:
                 response_text += f"{sol.get('description', '')}\n"
                 response_text += f"**Confidence:** {sol.get('probability', 0):.0%}\n"
             
-            chat_history.append(["DebugGenie 🧞", response_text])
+            chat_history.append({"role": "assistant", "content": response_text})
             
             # Generate solutions accordion HTML
             solutions_html = self._generate_solutions_html(result.solutions)
@@ -200,22 +200,7 @@ def create_interface():
     ui = DebugGenieUI()
     
     with gr.Blocks(
-        theme=gr.themes.Soft(
-            primary_hue="blue",
-            secondary_hue="purple"
-        ), 
-        title="DebugGenie 🧞",
-        css="""
-        .gradio-container {
-            font-family: 'Inter', sans-serif;
-        }
-        .error {
-            color: red;
-            padding: 16px;
-            background: #fee;
-            border-radius: 8px;
-        }
-        """
+        title="DebugGenie 🧞"
     ) as demo:
         
         gr.Markdown(
@@ -234,8 +219,7 @@ def create_interface():
                 error_input = gr.Code(
                     label="Paste Error Message / Stack Trace",
                     language="python",
-                    lines=10,
-                    placeholder="Paste your error message or stack trace here..."
+                    lines=10
                 )
                 
                 screenshot_input = gr.Image(
@@ -274,7 +258,7 @@ def create_interface():
                     with gr.Tab("💬 Chat"):
                         chatbot = gr.Chatbot(
                             height=500,
-                            show_copy_button=True,
+                            type="messages",
                             avatar_images=(
                                 None,
                                 "https://em-content.zobj.net/thumbs/120/apple/354/genie_1f9de.png"
@@ -340,8 +324,23 @@ def create_interface():
 if __name__ == "__main__":
     demo = create_interface()
     demo.launch(
-        server_name="0.0.0.0",
+        server_name="127.0.0.1",
         server_port=7860,
         share=False,
-        show_error=True
+        show_error=True,
+        theme=gr.themes.Soft(
+            primary_hue="blue",
+            secondary_hue="purple"
+        ),
+        css="""
+        .gradio-container {
+            font-family: 'Inter', sans-serif;
+        }
+        .error {
+            color: red;
+            padding: 16px;
+            background: #fee;
+            border-radius: 8px;
+        }
+        """
     )

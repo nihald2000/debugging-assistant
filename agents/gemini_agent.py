@@ -26,22 +26,18 @@ class GeminiAgent(BaseAgent):
         # Configure Thinking Mode and Native Tools
         self.generation_config = genai.types.GenerationConfig(
             temperature=0.2,
-            response_mime_type="application/json",
+            response_mime_type="application/json"
             # Enable Flash Thinking for complex reasoning
             # Note: Exact API syntax for thinking mode may vary by SDK version
-            thinking_config={"include_thoughts": True} 
+            # thinking_config={"include_thoughts": True}  # Commented out - not yet supported
         )
         
         # Initialize model with Google Search and Code Execution tools
+        # Note: Tools commented out for compatibility with current SDK version
         self.model_instance = genai.GenerativeModel(
             model_name=model,
-            generation_config=self.generation_config,
-            tools=[
-                # Native Google Search integration
-                {"google_search": {}},
-                # Native Code Execution for testing fixes
-                {"code_execution": {}}
-            ]
+            generation_config=self.generation_config
+            # tools=[{{"google_search": {}}}, {{"code_execution": {}}}]  # Not yet supported
         )
 
     def format_prompt(self, context: Dict[str, Any]) -> str:

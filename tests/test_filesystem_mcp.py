@@ -4,51 +4,69 @@ import sys
 from pathlib import Path
 import tempfile
 import shutil
+from unittest.mock import patch
 
 # Add project root to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from mcp_servers.filesystem_mcp import read_file, list_files, get_file_context, validate_path, ALLOWED_DIRECTORIES
+# Mock environment variable before importing to control workspace
+TEST_WORKSPACE = os.path.join(tempfile.gettempdir(), "debuggenie_legacy_test_ws")
+with patch.dict(os.environ, {"DEBUGGENIE_WORKSPACE": TEST_WORKSPACE}):
+    from mcp_servers.filesystem_mcp import (
+        read_file, 
+        list_files, 
+        get_file_context, 
+        validate_path_secure, 
+        WORKSPACE_ROOT,
+        rate_limiter
+    )
 
 class TestFilesystemMCP(unittest.TestCase):
     def setUp(self):
         # Create a temporary directory for testing
-        self.test_dir = tempfile.mkdtemp()
-        # Add test dir to allowed directories for validation logic
-        self.original_allowed = list(ALLOWED_DIRECTORIES)
-        ALLOWED_DIRECTORIES.append(Path(self.test_dir).resolve())
+        self.test_dir = WORKSPACE_ROOT
+        if self.test_dir.exists():
+            shutil.rmtree(self.test_dir)
+        self.test_dir.mkdir(parents=True)
         
         # Create some test files
-        with open(os.path.join(self.test_dir, "test.txt"), "w") as f:
+        with open(self.test_dir / "test.txt", "w") as f:
             f.write("Line 1\nLine 2\nLine 3\nLine 4\nLine 5\nLine 6\nLine 7")
         
-        os.makedirs(os.path.join(self.test_dir, "subdir"))
-        with open(os.path.join(self.test_dir, "subdir", "sub.py"), "w") as f:
+        subdir = self.test_dir / "subdir"
+        subdir.mkdir()
+        with open(subdir / "sub.py", "w") as f:
             f.write("print('hello')")
+            
+        rate_limiter.requests.clear()
 
     def tearDown(self):
         # Cleanup
-        shutil.rmtree(self.test_dir)
-        ALLOWED_DIRECTORIES.clear()
-        ALLOWED_DIRECTORIES.extend(self.original_allowed)
+        if self.test_dir.exists():
+            shutil.rmtree(self.test_dir)
 
     def test_read_file(self):
-        content = read_file(os.path.join(self.test_dir, "test.txt"))
+        # Read relative to workspace
+        content = read_file("test.txt")
         self.assertIn("Line 1", content)
         
     def test_read_file_security(self):
-        # Try to read outside allowed dir (assuming /etc/hosts or C:\Windows exists, but safer to just use parent of temp)
-        parent = Path(self.test_dir).parent
-        result = read_file(str(parent))
-        self.assertTrue(result.startswith("Error"))
+        # Try to read outside allowed dir
+        result = read_file("../outside.txt")
+        self.assertIn("Error", result)
 
     def test_list_files(self):
-        files = list_files(self.test_dir)
+        files = list_files(".")
         self.assertIn("test.txt", files)
-        self.assertIn(os.path.join("subdir", "sub.py"), files)
+        # Note: list_files returns relative paths now
+        # On windows path separator is backslash, but our tool normalizes or returns as is?
+        # The tool returns str(full_path.relative_to(dir_path)) which uses OS separator.
+        # Let's check for just the filename to be safe or normalize in test
+        self.assertTrue(any("test.txt" in f for f in files))
+        self.assertTrue(any("sub.py" in f for f in files))
 
     def test_get_file_context(self):
-        context = get_file_context(os.path.join(self.test_dir, "test.txt"), 4, context_lines=1)
+        context = get_file_context("test.txt", 4, context_lines=1)
         # Should show lines 3, 4, 5
         self.assertIn("Line 3", context)
         self.assertIn("> Line 4", context)

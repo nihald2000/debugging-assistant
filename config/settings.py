@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     
     # HuggingFace
     HF_TOKEN: Optional[str] = None
+
     
     # Application Settings
     DEBUG: bool = False

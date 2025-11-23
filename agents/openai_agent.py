@@ -1,4 +1,4 @@
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional,AsyncGenerator
 import json
 import os
 from swarm import Swarm, Agent
@@ -157,6 +157,24 @@ class OpenAIAgent(BaseAgent):
         except Exception as e:
             logger.error(f"Swarm analysis failed: {e}")
             return {"error": str(e), "status": "failed"}
+
+    def format_prompt(self, context: Dict[str, Any]) -> str:
+        """Format simple text prompt from context."""
+        return context.get("prompt", "")
+
+    async def _call_provider(self, prompt: str) -> str:
+        """
+        Direct call to OpenAI (not used by Swarm but required by BaseAgent).
+        """
+        # In a real scenario, we might use self.client.client.chat.completions.create
+        # But since we use Swarm, this is a placeholder or fallback
+        return "OpenAIAgent uses Swarm architecture, not direct calls."
+
+    async def _stream_provider(self, prompt: str) -> AsyncGenerator[str, None]:
+        """
+        Streaming call to OpenAI (not used by Swarm but required by BaseAgent).
+        """
+        yield "OpenAIAgent uses Swarm architecture, not direct streaming."
 
     def get_metrics(self) -> Dict[str, Any]:
         return {"type": "swarm", "model": self.model}

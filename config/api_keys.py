@@ -17,16 +17,16 @@ class APIConfig(BaseSettings):
     google_ai_api_key: str = Field(..., description="API key for Google Gemini")
     openai_api_key: str = Field(..., description="API key for OpenAI GPT-4")
     elevenlabs_api_key: str = Field(..., description="API key for ElevenLabs TTS")
-    blaxel_api_key: str = Field(..., description="API key for Blaxel Visualization")
-    modal_token: str = Field(..., description="Token for Modal Labs deployment")
-    hf_token: str = Field(..., description="Token for HuggingFace Spaces")
+    blaxel_api_key: str = Field("", description="API key for Blaxel Visualization")
+    modal_token: str = Field("", description="Token for Modal Labs deployment")
+    hf_token: str = Field("", description="Token for HuggingFace Spaces")
 
     @classmethod
     def load(cls):
         try:
             return cls()
         except ValidationError as e:
-            print("❌ Configuration Error: Missing or invalid API keys.")
+            print("ERROR: Configuration Error: Missing or invalid API keys.")
             for error in e.errors():
                 field = error['loc'][0]
                 print(f"   - {field}: {error['msg']}")

@@ -35,7 +35,7 @@ def main():
     if IS_SPACES:
         demo.queue(max_size=10, default_concurrency_limit=5)
         demo.launch(
-            server_name="0.0.0.0",
+            server_name="127.0.0.1",
             server_port=7860,
             share=False,
             show_error=True
@@ -43,7 +43,7 @@ def main():
     else:
         demo.queue(max_size=20)
         demo.launch(
-            server_name="0.0.0.0",
+            server_name="127.0.0.1",
             server_port=7860,
             share=False,
             show_error=True
