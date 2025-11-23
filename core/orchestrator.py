@@ -10,13 +10,7 @@ from agents.claude_agent import ClaudeAgent
 from agents.openai_agent import OpenAIAgent
 from config.api_keys import api_config
 
-class DebugResult(BaseModel):
-    root_cause: str
-    solutions: List[Dict[str, Any]]
-    fix_instructions: str
-    confidence_score: float
-    agent_metrics: Dict[str, Any]
-    execution_time: float
+from core.models import DebugResult
 
 from core.mcp_client import MCPClientManager
 from pathlib import Path

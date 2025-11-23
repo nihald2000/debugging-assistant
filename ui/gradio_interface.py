@@ -6,19 +6,16 @@ import json
 import os
 
 # Import core components
-from core.orchestrator import DebugOrchestrator
+from ui.backend import DebugBackend, LocalBackend
+from core.models import RankedSolution
 from visualization.blaxel_generator import ErrorFlowVisualizer
-from visualization.flow_analyzer import FlowAnalyzer
-from core.solution_ranker import SolutionRanker, RankedSolution
 from voice.elevenlabs_tts import VoiceExplainer
 from config.api_keys import api_config
 
 class DebugGenieUI:
-    def __init__(self):
-        self.orchestrator = DebugOrchestrator()
+    def __init__(self, backend: DebugBackend):
+        self.backend = backend
         self.visualizer = ErrorFlowVisualizer()
-        self.flow_analyzer = FlowAnalyzer()
-        self.ranker = SolutionRanker()
         
         # Initialize voice explainer if API key is available
         try:
@@ -70,11 +67,8 @@ class DebugGenieUI:
                 
             progress(0.2, desc="Running multi-agent analysis...")
             
-            # Run orchestrator
-            result = await self.orchestrator.orchestrate_debug(
-                error_context=context,
-                stream_callback=None
-            )
+            # Run backend analysis
+            result = await self.backend.analyze(context)
             
             progress(0.7, desc="Generating visualizations...")
             
@@ -195,12 +189,27 @@ class DebugGenieUI:
         html += "</div>"
         return html
 
-def create_interface():
+def create_interface(backend: DebugBackend):
     """Create the main Gradio interface."""
-    ui = DebugGenieUI()
+    ui = DebugGenieUI(backend)
     
     with gr.Blocks(
-        title="DebugGenie 🧞"
+        title="DebugGenie 🧞",
+        theme=gr.themes.Soft(
+            primary_hue="blue",
+            secondary_hue="purple"
+        ),
+        css="""
+        .gradio-container {
+            font-family: 'Inter', sans-serif;
+        }
+        .error {
+            color: red;
+            padding: 16px;
+            background: #fee;
+            border-radius: 8px;
+        }
+        """
     ) as demo:
         
         gr.Markdown(
@@ -322,25 +331,12 @@ def create_interface():
     return demo
 
 if __name__ == "__main__":
-    demo = create_interface()
+    # Default to local backend for direct execution
+    backend = LocalBackend()
+    demo = create_interface(backend)
     demo.launch(
         server_name="127.0.0.1",
         server_port=7860,
         share=False,
-        show_error=True,
-        theme=gr.themes.Soft(
-            primary_hue="blue",
-            secondary_hue="purple"
-        ),
-        css="""
-        .gradio-container {
-            font-family: 'Inter', sans-serif;
-        }
-        .error {
-            color: red;
-            padding: 16px;
-            background: #fee;
-            border-radius: 8px;
-        }
-        """
+        show_error=True
     )

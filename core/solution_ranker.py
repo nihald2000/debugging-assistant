@@ -3,16 +3,8 @@ from pydantic import BaseModel, Field
 import math
 from datetime import datetime
 
-class RankedSolution(BaseModel):
-    rank: int
-    title: str
-    description: str
-    steps: List[str]
-    code_changes: List[dict] = Field(default_factory=list)
-    confidence: float
-    sources: List[str] = Field(default_factory=list)
-    why_ranked_here: str
-    trade_offs: List[str] = Field(default_factory=list)
+from datetime import datetime
+from core.models import RankedSolution
 
 class SolutionRanker:
     def __init__(self):
